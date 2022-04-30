@@ -2,13 +2,12 @@ import sys
 from PyQt5.QtWidgets import QMainWindow, QWidget, QMenuBar, QStatusBar, QApplication, QLabel, QPushButton
 from PyQt5.QtWidgets import QCheckBox
 from PyQt5 import uic
-sys.path.append(r"D:\YTU\Graduation Project\DroneMocap")
-from DataLink.DataLink import *
+from DroneMocap_DataLink import CamLink
 
 class MoCapGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        uic.loadUi('App//Mocap.ui', self)
+        uic.loadUi('Mocap.ui', self)
 
         # defining widgets
         self.stream1_label = self.findChild(QLabel, 'stream1_label')
