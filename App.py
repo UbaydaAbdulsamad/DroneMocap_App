@@ -1,9 +1,12 @@
+import pickle
 import sys
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QComboBox, QRadioButton, QSlider, QStatusBar, QButtonGroup
-from PyQt5.QtWidgets import QCheckBox, QFileDialog
-from PyQt5.QtGui import QImage, QPixmap
+import os
+from Mocap.Mocap import SingleCameraCalibrate
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QComboBox, QRadioButton, QSlider, QButtonGroup
+from PyQt5.QtWidgets import QCheckBox, QFileDialog, QListWidget, QListWidgetItem, QTabWidget, QLineEdit, QSpinBox, QDoubleSpinBox
+from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5 import uic
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 import numpy as np
 import cv2 as cv
 
@@ -58,6 +61,23 @@ class MoCapGUI(QMainWindow):
         self.rgb_buttonGroup.setId(self.channelBlue_Radio, 1)
         self.rgb_buttonGroup.setId(self.channelGreen_Radio, 2)
         self.video_horizontal_slider = self.findChild(QSlider, 'video_horizontalSlider')
+        self.browse_images_pushButton = self.findChild(QPushButton, 'browse_images_pushButton')
+        self.images_path_comboBox = self.findChild(QComboBox, 'images_path_comboBox')
+        self.loaded_images_list = self.findChild(QListWidget, 'loaded_images_list')
+        self.main_tabWidget = self.findChild(QTabWidget, 'main_tabWidget')
+        self.delete_image_pushButton = self.findChild(QPushButton, 'delete_image_pushButton')
+        self.reload_pushButton = self.findChild(QPushButton, 'reload_pushButton')
+        self.delete_all_images_pushButton = self.findChild(QPushButton, 'delete_all_images_pushButton')
+        self.single_calibrate_pushButton = self.findChild(QPushButton, 'single_calibrate_pushButton')
+        self.camera_id_lineEdit = self.findChild(QLineEdit, 'camera_id_lineEdit')
+        self.chess_size_x_spinBox = self.findChild(QSpinBox, 'chess_size_x_spinBox')
+        self.chess_size_y_spinBox = self.findChild(QSpinBox, 'chess_size_y_spinBox')
+        self.img_disp_time_doubleSpinBox = self.findChild(QDoubleSpinBox, 'img_disp_time_doubleSpinBox')
+        self.camera_intrinsic_list = self.findChild(QListWidget, 'camera_intrinsic_list')
+        self.export_intrinsic_text_pushButton = self.findChild(QPushButton, 'export_intrinsic_text_pushButton')
+        self.export_intrinsic_mocap_pushButton = self.findChild(QPushButton, 'export_intrinsic_mocap_pushButton')
+        self.disp_time_pushButton = self.findChild(QPushButton, 'disp_time_pushButton')
+
 
         # Linking signals to widgets
         self.loadVideo1_Button.clicked.connect(self.load_video1)
@@ -75,6 +95,16 @@ class MoCapGUI(QMainWindow):
         self.brightnessMax_Slider.valueChanged.connect(self.update_mask_parameters)
         self.rgb_buttonGroup.buttonClicked.connect(self.update_mask_sliders)
         self.video_buttonGroup.buttonClicked.connect(self.update_mask_sliders)
+        self.browse_images_pushButton.clicked.connect(self.browse_single_images)
+        assert isinstance(self.main_tabWidget, QTabWidget)
+        self.main_tabWidget.currentChanged.connect(self.main_tab_changed)
+        assert isinstance(self.loaded_images_list, QListWidget)
+        self.loaded_images_list.itemClicked.connect(self.image_clicked)
+        self.delete_image_pushButton.clicked.connect(self.remove_image_item)
+        self.reload_pushButton.clicked.connect(self.reload_loaded_images_list)
+        self.single_calibrate_pushButton.clicked.connect(self.single_calibrate)
+        self.export_intrinsic_text_pushButton.clicked.connect(self.export_intrinsic_txt)
+        self.export_intrinsic_mocap_pushButton.clicked.connect(self.export_intrinsic_mocap)
 
     def load_video1(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Video load", ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
@@ -180,6 +210,116 @@ class MoCapGUI(QMainWindow):
 
         else:
             print("No stream is available")
+
+    def main_tab_changed(self, index):
+
+        if index == 0:
+            self.stream1_label.show()
+            self.stream2_label.show()
+            self.stream3_label.show()
+            self.stream4_label.show()
+
+        if index == 1:
+            self.stream1_label.show()
+            self.stream2_label.hide()
+            self.stream3_label.hide()
+            self.stream4_label.hide()
+
+    def populate_single_images_list(self, folder_path):
+        self.loaded_images_list.clear()
+        images = os.listdir(folder_path)
+
+        for image in images:
+            path = os.path.join(folder_path, image)
+
+            icon = QIcon()
+            icon.addPixmap(QPixmap(path), QIcon.Normal, QIcon.Off)
+
+            item = QListWidgetItem()
+            item.setIcon(icon)
+            item.setData(Qt.UserRole, cv.imread(path))
+            self.loaded_images_list.addItem(item)
+
+    def image_clicked(self):
+        item = self.loaded_images_list.currentItem()
+        image = item.data(Qt.UserRole)
+        q_image = self.convert_cv_qt(image)
+        q_image = q_image.scaledToWidth(1500)
+        self.stream1_label.setPixmap(QPixmap(q_image))
+
+    def remove_image_item(self):
+        row = self.loaded_images_list.currentRow()
+        self.loaded_images_list.takeItem(row)
+
+    def reload_loaded_images_list(self):
+        assert isinstance(self.images_path_comboBox, QComboBox)
+        path = self.images_path_comboBox.currentText()
+        self.populate_single_images_list(path)
+
+    def browse_single_images(self):
+        file = QFileDialog.getExistingDirectory(self, "Select Directory")
+        assert isinstance(self.images_path_comboBox, QComboBox)
+        self.images_path_comboBox.addItem(file)
+        self.populate_single_images_list(file)
+
+    def single_calibrate(self):
+        camera_id = self.camera_id_lineEdit.text()
+        x = self.chess_size_x_spinBox.value()
+        y = self.chess_size_y_spinBox.value()
+        time = None
+        if self.disp_time_pushButton.isChecked():
+            time = int(self.img_disp_time_doubleSpinBox.value() * 1000)
+
+        images = list()
+        items = self.loaded_images_list.findItems('', Qt.MatchRegExp)
+        for item in items:
+            img = item.data(Qt.UserRole)
+            images.append(img)
+
+        camera = SingleCameraCalibrate(camera_id, images, (x, y), showPeriod=time)
+        self.loaded_images_list.clear()
+        for img in camera.getImagesDrawn:
+            icon = QIcon()
+            qt_img = self.convert_cv_qt(img)
+            icon.addPixmap(QPixmap(qt_img), QIcon.Normal, QIcon.Off)
+
+            item = QListWidgetItem()
+            item.setIcon(icon)
+            item.setData(Qt.UserRole, img)
+            self.loaded_images_list.addItem(item)
+
+        item = QListWidgetItem()
+        item.setText(camera.getName)
+        item.setData(Qt.UserRole, camera)
+
+        assert isinstance(self.camera_intrinsic_list, QListWidget)
+        self.camera_intrinsic_list.addItem(item)
+
+        camera.clear_images()
+
+    def export_intrinsic_txt(self):
+        item = self.camera_intrinsic_list.currentItem()
+        assert isinstance(item, QListWidgetItem)
+        cameraObj = item.data(Qt.UserRole)
+        assert isinstance(cameraObj, SingleCameraCalibrate)
+        data = "Camera ID = " + cameraObj.getName + "\n\n" \
+               + "Images frame size = " + str(cameraObj.getFrameSize) + "\n\n" \
+               + "Intrinsic Matrix:\n" + str(cameraObj.getIntMatrix) + "\n\n" \
+               + "Distortion Coefficients:\n" + str(cameraObj.getDistortion)
+
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getName, "Text (*.txt)")
+        with open(fileName, 'w') as f:
+            f.write(data)
+
+    def export_intrinsic_mocap(self):
+        item = self.camera_intrinsic_list.currentItem()
+        assert isinstance(item, QListWidgetItem)
+        cameraObj = item.data(Qt.UserRole)
+        assert isinstance(cameraObj, SingleCameraCalibrate)
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getName, "Intsc (*.intsc)")
+
+        with open(fileName, 'wb') as f:
+            pickle.dump(cameraObj, f)
 
     @pyqtSlot(np.ndarray)
     def display_frame(self, images):

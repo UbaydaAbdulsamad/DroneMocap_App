@@ -5,6 +5,7 @@ import cv2
 import glob
 import numpy as np
 import pickle
+import io
 
 
 def load_stereo(path, stream1, stream2):
@@ -228,89 +229,73 @@ class SingleCameraCalibrate:
     _path (str): path of the images to be imported
     _chessboard_size(tuple): number of inside corners of the chessboard
     _showPeriod (int): the time period an image of calibration will stay on screen
-    _extension (str): extension of the images to be imported
     _showResolution: resolution of the displayed images
     Returns:
     Camera object with intrinsic parameters
     """
 
-    def __init__(self, _name: str, _path: str, _chessboard_size: tuple, **kwargs):
+    def __init__(self, _name: str, _images_list: list, _chessboard_size: tuple, **kwargs):
 
         self._name = _name
-        self._imagesPath = _path
+        self._images_list = _images_list
+        self._images_drawn = list()
         self._chessboardSize = _chessboard_size
         self._frameSize = None
         self._cameraMatrix = None
         self._newCameraMatrix = None
         self._distortionCoef = None
         self._meanError = 0
-
-        self._showPeriod = kwargs.get('showPeriod', 1500)
-        self._extension = kwargs.get('extension', 'png')
-        self._showResolution = kwargs.get('showResolution', (1280, 720))
+        self._showPeriod = kwargs.get('showPeriod', None)
 
         self.Calibrate()
 
     def Calibrate(self):
-
         # termination criteria:
-        criteria = (cv2.TermCriteria_EPS +
-                    cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        criteria = (cv2.TermCriteria_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
         # Prepare object points, like (0,0,0), (1,0,0), (2,0,0), ... (6,5,0)
-        objp = np.zeros(
-            (self._chessboardSize[0] * self._chessboardSize[1], 3), np.float32)
-        objp[:, :2] = np.mgrid[0:self._chessboardSize[0],
-                               0:self._chessboardSize[1]].T.reshape(-1, 2)
+        objp = np.zeros((self._chessboardSize[0] * self._chessboardSize[1], 3), np.float32)
+        objp[:, :2] = np.mgrid[0:self._chessboardSize[0], 0:self._chessboardSize[1]].T.reshape(-1, 2)
 
         # Arrays to store object points and image points from all the images
         objPoints = []  # 3d point in real world space
         imgPoints = []  # 2d points in image plane
 
-        images = glob.glob(self._imagesPath + '\\*.' + self._extension)
-        for image in images:
-            print(image)
-            cv2.im
-            img = cv2.imread(image)
+        for img in self._images_list:
             self._frameSize = [img.shape[1], img.shape[0]]
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
             # Find chess board corners
-            ret, corners = cv2.findChessboardCorners(
-                gray, self._chessboardSize, None)
+            ret, corners = cv2.findChessboardCorners(gray, self._chessboardSize, None)
 
             # If found, add object points, image points (after refining them), Uncomment code block to show the operation
             if ret:
                 objPoints.append(objp)
-                corners2 = cv2.cornerSubPix(
-                    gray, corners, (11, 11), (-1, -1), criteria)
+                corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
                 imgPoints.append(corners)
 
                 # draw and display the the corners
-                cv2.drawChessboardCorners(
-                    img, self._chessboardSize, corners2, ret)
-                imgLow = cv2.resize(img, self._showResolution)
-                cv2.imshow('imgLow', imgLow)
+                cv2.drawChessboardCorners(img, self._chessboardSize, corners2, ret)
+                self._images_drawn.append(img)
+                if not self._showPeriod:
+                    continue
+                cv2.imshow('imgLow', img)
                 cv2.waitKey(self._showPeriod)
         cv2.destroyAllWindows()
 
         # Calibrating using data
-        ret, self._cameraMatrix, self._distortionCoef, rvecs, tvecs = cv2.calibrateCamera(objPoints, imgPoints,
-                                                                                          self._frameSize, None, None)
-        self._newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(self._cameraMatrix, self._distortionCoef,
-                                                                   self._frameSize, 1, self._frameSize)
+        ret, self._cameraMatrix, self._distortionCoef, rvecs, tvecs = cv2.calibrateCamera(objPoints, imgPoints,self._frameSize, None, None)
+        self._newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(self._cameraMatrix, self._distortionCoef,self._frameSize, 1, self._frameSize)
 
         # Calculating mean error
         for i in range(len(objPoints)):
-            imgPoints2, _ = cv2.projectPoints(objPoints[i], rvecs[i], tvecs[i], self._cameraMatrix,
-                                              self._distortionCoef)
-            error = cv2.norm(imgPoints[i], imgPoints2,
-                             cv2.NORM_L2) / len(imgPoints2)
+            imgPoints2, _ = cv2.projectPoints(objPoints[i], rvecs[i], tvecs[i], self._cameraMatrix,self._distortionCoef)
+            error = cv2.norm(imgPoints[i], imgPoints2, cv2.NORM_L2) / len(imgPoints2)
             self._meanError += error
 
-    def Save(self, _save_path):
-        with open("{}\\{}.pickle".format(_save_path, self._name), 'wb') as f:
-            pickle.dump(self, f)
+    def clear_images(self):
+        self._images_drawn.clear()
+        self._images_list.clear()
 
     @property
     def getName(self):
@@ -328,6 +313,9 @@ class SingleCameraCalibrate:
     def getFrameSize(self):
         return self._frameSize
 
+    @property
+    def getImagesDrawn(self):
+        return self._images_drawn
 
 class StereoCalibrate:
     '''

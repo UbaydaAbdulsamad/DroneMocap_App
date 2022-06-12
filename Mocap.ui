@@ -171,7 +171,7 @@
      </layout>
     </item>
     <item>
-     <widget class="QTabWidget" name="tabWidget">
+     <widget class="QTabWidget" name="main_tabWidget">
       <property name="enabled">
        <bool>true</bool>
       </property>
@@ -185,7 +185,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>3</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="Camera_tab">
        <attribute name="title">
@@ -241,7 +241,7 @@
         <item>
          <widget class="QToolBox" name="toolBox">
           <property name="currentIndex">
-           <number>0</number>
+           <number>2</number>
           </property>
           <widget class="QWidget" name="page">
            <property name="geometry">
@@ -445,8 +445,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>317</width>
-             <height>249</height>
+             <width>319</width>
+             <height>601</height>
             </rect>
            </property>
            <attribute name="label">
@@ -547,8 +547,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>217</width>
-             <height>260</height>
+             <width>319</width>
+             <height>601</height>
             </rect>
            </property>
            <attribute name="label">
@@ -618,50 +618,88 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_13">
            <item>
-            <widget class="QLabel" name="label_2">
+            <widget class="QLabel" name="reload_images_pushButton">
              <property name="text">
               <string>Load images from existing list</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QComboBox" name="comboBox_5"/>
+            <widget class="QComboBox" name="single_img_path_comboBox"/>
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_14">
              <item>
-              <widget class="QPushButton" name="pushButton_18">
+              <widget class="QPushButton" name="browse_images_pushButton">
                <property name="text">
-                <string>Browse Images</string>
+                <string>Browse</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QComboBox" name="comboBox_6"/>
+              <widget class="QComboBox" name="images_path_comboBox">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
              </item>
             </layout>
            </item>
            <item>
-            <widget class="QListView" name="listView_3"/>
+            <widget class="QListWidget" name="loaded_images_list">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>1</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="defaultDropAction">
+              <enum>Qt::IgnoreAction</enum>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>90</width>
+               <height>90</height>
+              </size>
+             </property>
+             <property name="isWrapping" stdset="0">
+              <bool>true</bool>
+             </property>
+             <property name="gridSize">
+              <size>
+               <width>75</width>
+               <height>75</height>
+              </size>
+             </property>
+             <property name="viewMode">
+              <enum>QListView::IconMode</enum>
+             </property>
+             <property name="uniformItemSizes">
+              <bool>true</bool>
+             </property>
+            </widget>
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_15">
              <item>
-              <widget class="QPushButton" name="pushButton_19">
+              <widget class="QPushButton" name="delete_image_pushButton">
                <property name="text">
                 <string>Delete</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QPushButton" name="pushButton_20">
+              <widget class="QPushButton" name="reload_pushButton">
                <property name="text">
-                <string>Undo</string>
+                <string>Reload</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QPushButton" name="pushButton_21">
+              <widget class="QPushButton" name="delete_all_images_pushButton">
                <property name="text">
                 <string>Delete all</string>
                </property>
@@ -679,60 +717,6 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_14">
            <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_16">
-             <item>
-              <widget class="QLabel" name="label_15">
-               <property name="text">
-                <string>Chessboard Size</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSpinBox" name="spinBox_6"/>
-             </item>
-             <item alignment="Qt::AlignHCenter">
-              <widget class="QLabel" name="label_16">
-               <property name="text">
-                <string>By</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSpinBox" name="spinBox_7"/>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_17">
-             <item>
-              <widget class="QPushButton" name="pushButton_22">
-               <property name="text">
-                <string>Display time (seconds):</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="doubleSpinBox_4"/>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="QPushButton" name="pushButton_23">
-             <property name="text">
-              <string>Calibrate</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
-         <widget class="QGroupBox" name="groupBox_9">
-          <property name="title">
-           <string>Export Intrinsic Parameters</string>
-          </property>
-          <layout class="QVBoxLayout" name="verticalLayout_12">
-           <item>
             <layout class="QHBoxLayout" name="horizontalLayout_13">
              <item>
               <widget class="QLabel" name="label_14">
@@ -749,19 +733,96 @@
                 </size>
                </property>
                <property name="text">
-                <string>Camera Name</string>
+                <string>Camera ID</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_5"/>
+              <widget class="QLineEdit" name="camera_id_lineEdit"/>
              </item>
             </layout>
            </item>
            <item>
-            <widget class="QPushButton" name="pushButton_17">
+            <layout class="QHBoxLayout" name="horizontalLayout_16">
+             <property name="spacing">
+              <number>10</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_15">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Chessboard Size:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="chess_size_x_spinBox">
+               <property name="minimum">
+                <number>2</number>
+               </property>
+               <property name="value">
+                <number>19</number>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_16">
+               <property name="text">
+                <string>By</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="chess_size_y_spinBox">
+               <property name="minimum">
+                <number>2</number>
+               </property>
+               <property name="value">
+                <number>12</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_17" stretch="0,0">
+             <item>
+              <widget class="QPushButton" name="disp_time_pushButton">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Display time (seconds):</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="img_disp_time_doubleSpinBox">
+               <property name="singleStep">
+                <double>0.250000000000000</double>
+               </property>
+               <property name="value">
+                <double>0.500000000000000</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QPushButton" name="single_calibrate_pushButton">
              <property name="text">
-              <string>Export</string>
+              <string>Calibrate</string>
              </property>
             </widget>
            </item>
@@ -769,17 +830,41 @@
          </widget>
         </item>
         <item>
-         <spacer name="verticalSpacer_3">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
+         <widget class="QGroupBox" name="groupBox_9">
+          <property name="title">
+           <string>Export Intrinsic Parameters</string>
           </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>208</height>
-           </size>
-          </property>
-         </spacer>
+          <layout class="QVBoxLayout" name="verticalLayout_12">
+           <item>
+            <widget class="QListWidget" name="camera_intrinsic_list">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_7">
+             <item>
+              <widget class="QPushButton" name="export_intrinsic_text_pushButton">
+               <property name="text">
+                <string>Export as text</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="export_intrinsic_mocap_pushButton">
+               <property name="text">
+                <string>Export as .mocap</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
         </item>
        </layout>
       </widget>
@@ -1207,7 +1292,24 @@
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>delete_all_images_pushButton</sender>
+   <signal>clicked()</signal>
+   <receiver>loaded_images_list</receiver>
+   <slot>clear()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1065</x>
+     <y>386</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1028</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
  <buttongroups>
   <buttongroup name="video_buttonGroup"/>
   <buttongroup name="rgb_buttonGroup"/>
