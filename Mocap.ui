@@ -948,9 +948,6 @@
             <layout class="QHBoxLayout" name="horizontalLayout_20">
              <item>
               <widget class="QRadioButton" name="activeMaskVideo1_Radio">
-               <property name="tabletTracking">
-                <bool>false</bool>
-               </property>
                <property name="text">
                 <string>Video 1</string>
                </property>
@@ -958,17 +955,23 @@
                 <bool>true</bool>
                </property>
                <attribute name="buttonGroup">
-                <string notr="true">Video_buttonGroup</string>
+                <string notr="true">video_buttonGroup</string>
                </attribute>
               </widget>
              </item>
              <item>
               <widget class="QRadioButton" name="activeMaskVideo2_Radio">
+               <property name="tabletTracking">
+                <bool>false</bool>
+               </property>
                <property name="text">
                 <string>Video 2</string>
                </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
                <attribute name="buttonGroup">
-                <string notr="true">Video_buttonGroup</string>
+                <string notr="true">video_buttonGroup</string>
                </attribute>
               </widget>
              </item>
@@ -999,7 +1002,7 @@
                 <bool>true</bool>
                </property>
                <attribute name="buttonGroup">
-                <string notr="true">RGB_buttonGroup</string>
+                <string notr="true">rgb_buttonGroup</string>
                </attribute>
               </widget>
              </item>
@@ -1009,7 +1012,7 @@
                 <string>Green</string>
                </property>
                <attribute name="buttonGroup">
-                <string notr="true">RGB_buttonGroup</string>
+                <string notr="true">rgb_buttonGroup</string>
                </attribute>
               </widget>
              </item>
@@ -1019,7 +1022,7 @@
                 <string>Blue</string>
                </property>
                <attribute name="buttonGroup">
-                <string notr="true">RGB_buttonGroup</string>
+                <string notr="true">rgb_buttonGroup</string>
                </attribute>
               </widget>
              </item>
@@ -1100,6 +1103,9 @@
                <property name="maximum">
                 <number>255</number>
                </property>
+               <property name="sliderPosition">
+                <number>255</number>
+               </property>
                <property name="orientation">
                 <enum>Qt::Vertical</enum>
                </property>
@@ -1131,6 +1137,9 @@
              <item>
               <widget class="QSlider" name="saturationMax_Slider">
                <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sliderPosition">
                 <number>255</number>
                </property>
                <property name="orientation">
@@ -1166,6 +1175,9 @@
                <property name="maximum">
                 <number>255</number>
                </property>
+               <property name="sliderPosition">
+                <number>255</number>
+               </property>
                <property name="orientation">
                 <enum>Qt::Vertical</enum>
                </property>
@@ -1197,7 +1209,7 @@
  <resources/>
  <connections/>
  <buttongroups>
-  <buttongroup name="Video_buttonGroup"/>
-  <buttongroup name="RGB_buttonGroup"/>
+  <buttongroup name="video_buttonGroup"/>
+  <buttongroup name="rgb_buttonGroup"/>
  </buttongroups>
 </ui>
