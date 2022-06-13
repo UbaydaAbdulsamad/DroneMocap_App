@@ -234,9 +234,9 @@ class SingleCameraCalibrate:
     Camera object with intrinsic parameters
     """
 
-    def __init__(self, _name: str, _images_list: list, _chessboard_size: tuple, **kwargs):
+    def __init__(self, _id: str, _images_list: list, _chessboard_size: tuple, **kwargs):
 
-        self._name = _name
+        self._id = _id
         self._images_list = _images_list
         self._images_drawn = list()
         self._chessboardSize = _chessboard_size
@@ -298,8 +298,8 @@ class SingleCameraCalibrate:
         self._images_list.clear()
 
     @property
-    def getName(self):
-        return self._name
+    def getID(self):
+        return self._id
 
     @property
     def getIntMatrix(self):
@@ -317,13 +317,15 @@ class SingleCameraCalibrate:
     def getImagesDrawn(self):
         return self._images_drawn
 
+
 class StereoCalibrate:
     '''
     Calibration of set of two calibrated cameras (getting the extrinsic parameters)
 
     Args:
-        name(str): name of the calibrated set
-        images_path(str): path of the images to be imported
+        ID(str): name of the calibrated set
+        images1(list): list of numpy arrays representing first set of images
+        images2(list): list of numpy arrays representing second set of images
         camera1(SingleCameraCalibrate): object of the first camera
         camera2(SingleCameraCalibrate): object of the second camera
         chessboard_size(tuple): number of all internal corners of the chessboard (x:int, y:int)
@@ -336,9 +338,10 @@ class StereoCalibrate:
 
     '''
 
-    def __init__(self, name, images_path, camera1, camera2, chessboard_size, chessboard_distance, **kwargs):
-        self._name = name
-        self._imagesPath = images_path
+    def __init__(self, ID, images1, images2, camera1, camera2, chessboard_size, chessboard_distance, **kwargs):
+        self._ID = ID
+        self._images1 = images1
+        self._images2 = images2
         self._camera1 = camera1
         self._camera2 = camera2
         self._chessboardSize = chessboard_size
@@ -355,8 +358,8 @@ class StereoCalibrate:
         self._c1Extension = kwargs.get('Camera1Ext', 'png')
         self._c2Extension = kwargs.get('Camera2Ext', 'png')
         self._showResolution = kwargs.get('showResolution', (640, 360))
-        self._c1FileName = kwargs.get('camera1FileName', self._camera1.getName)
-        self._c2FileName = kwargs.get('camera2FileName', self._camera2.getName)
+        self._c1FileName = kwargs.get('camera1FileName', self._camera1.getID)
+        self._c2FileName = kwargs.get('camera2FileName', self._camera2.getID)
 
         assert isinstance(camera1, SingleCameraCalibrate)
         assert isinstance(camera2, SingleCameraCalibrate)
@@ -365,14 +368,11 @@ class StereoCalibrate:
 
     def Calibrate(self):
         # Termination criteria
-        criteria = (cv2.TERM_CRITERIA_EPS +
-                    cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
         # Prepare object points, like (0,0,0) , (1,0,0), (2,0,0), ... , (6,5,0)
-        objp = np.zeros(
-            (self._chessboardSize[0] * self._chessboardSize[1], 3), np.float32)
-        objp[:, :2] = np.mgrid[0:self._chessboardSize[0],
-                               0:self._chessboardSize[1]].T.reshape(-1, 2)
+        objp = np.zeros((self._chessboardSize[0] * self._chessboardSize[1], 3), np.float32)
+        objp[:, :2] = np.mgrid[0:self._chessboardSize[0], 0:self._chessboardSize[1]].T.reshape(-1, 2)
         objp = objp * self._chessboardDistance
 
         # Arrays to store object points and image points from all the images
@@ -380,66 +380,48 @@ class StereoCalibrate:
         imgpointsL = []  # 2d points in image plane.
         imgpointsR = []  # 2d points in image plane.
 
-        imagesFirst = glob.glob(
-            self._imagesPath + '\\{}*.{}'.format(self._c1FileName, self._c1Extension))
-        imagesSecond = glob.glob(
-            self._imagesPath + '\\{}*.{}'.format(self._c2FileName, self._c2Extension))
-
-        for imgFirst, imgSecond in zip(imagesFirst, imagesSecond):
-            imgL = cv2.imread(imgFirst)
-            imgR = cv2.imread(imgSecond)
-            grayL = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
-            grayR = cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)
+        for img1, img2 in zip(self._images1, self._images2):
+            grayL = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+            grayR = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
             # Find chessboard corners
-            retL, cornersL = cv2.findChessboardCorners(
-                grayL, self._chessboardSize, None)
-            retR, cornersR = cv2.findChessboardCorners(
-                grayR, self._chessboardSize, None)
+            retL, cornersL = cv2.findChessboardCorners(grayL, self._chessboardSize, None)
+            retR, cornersR = cv2.findChessboardCorners(grayR, self._chessboardSize, None)
 
             # If found, add object points, image points (after refining them)
             if retL and retR:
                 self._pairImagesNumber += 1
                 objpoints.append(objp)
 
-                cornersL = cv2.cornerSubPix(
-                    grayL, cornersL, (11, 11), (-1, -1), criteria)
+                cornersL = cv2.cornerSubPix(grayL, cornersL, (11, 11), (-1, -1), criteria)
                 imgpointsL.append(cornersL)
-                cornersR = cv2.cornerSubPix(
-                    grayR, cornersR, (11, 11), (-1, -1), criteria)
+                cornersR = cv2.cornerSubPix(grayR, cornersR, (11, 11), (-1, -1), criteria)
                 imgpointsR.append(cornersR)
 
                 # Draw and display the corners
-                cv2.drawChessboardCorners(
-                    imgL, self._chessboardSize, cornersL, retL)
-                cv2.drawChessboardCorners(
-                    imgR, self._chessboardSize, cornersR, retR)
-                imgLresized = cv2.resize(imgL, self._showResolution)
-                imgRresized = cv2.resize(imgR, self._showResolution)
-                cv2.imshow(self._camera1.getName, imgLresized)
-                cv2.imshow(self._camera2.getName, imgRresized)
-                print(imgFirst.split('\\')[-1], imgSecond.split('\\')[-1])
+                cv2.drawChessboardCorners(img1, self._chessboardSize, cornersL, retL)
+                cv2.drawChessboardCorners(img2, self._chessboardSize, cornersR, retR)
+                imgLresized = cv2.resize(img1, self._showResolution)
+                imgRresized = cv2.resize(img2, self._showResolution)
+                cv2.imshow(self._camera1.getID, imgLresized)
+                cv2.imshow(self._camera2.getID, imgRresized)
                 cv2.waitKey(self.showPeriod)
 
             elif retL and not retR:
-                print("couldn't detect corners on {}'s photo.".format(
-                    self._camera1.getName))
+                print("couldn't detect corners on {}'s photo.".format(self._camera1.getID))
 
             elif not retL and retR:
-                print("couldn't detect corners on {}'s photo.".format(
-                    self._camera2.getName))
+                print("couldn't detect corners on {}'s photo.".format(self._camera2.getID))
 
             else:
-                print("couldn't detect corners on both photos.".format(imgSecond))
-        print("Number of pair of photos Used In Calibration: ",
-              self._pairImagesNumber)
+                print("couldn't detect corners on both photos.")
+        print("Number of pair of photos Used In Calibration: ", self._pairImagesNumber)
         cv2.destroyAllWindows()
 
         # Stereo Calibration
         flags = 0
         flags |= cv2.CALIB_FIX_INTRINSIC
-        criteria_stereo = (cv2.TERM_CRITERIA_EPS +
-                           cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        criteria_stereo = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
         retStereo, newCameraMatrixWebcam, distFirst, newCameraMatrixJ6, distSecond, self._rotationMat, self._transVector, essentialMatrix, fundamentalMatrix = \
             cv2.stereoCalibrate(objpoints, imgpointsL, imgpointsR, self._camera1.getIntMatrix,
@@ -447,15 +429,21 @@ class StereoCalibrate:
                                 grayL.shape[::-1], criteria_stereo, flags)
 
         # Calculating Projection Matrices
-        self._projMatC1 = np.concatenate(
-            (self._camera1.getIntMatrix, np.zeros((3, 1))), axis=1)
-        self._projMatC2 = np.dot(self._camera1.getIntMatrix,
-                                 np.concatenate((self._rotationMat, self._transVector), axis=1))
+        self._projMatC1 = np.concatenate((self._camera1.getIntMatrix, np.zeros((3, 1))), axis=1)
+        self._projMatC2 = np.dot(self._camera1.getIntMatrix, np.concatenate((self._rotationMat, self._transVector), axis=1))
 
     def Save(self, _save_path):
-        with open("{}\\{}.pickle".format(_save_path, self._name), 'wb') as f:
+        with open("{}\\{}.pickle".format(_save_path, self._ID), 'wb') as f:
             pickle.dump(self, f)
         print('file has been saved to {}'.format(_save_path))
+
+    def clear_images(self):
+        self._images1 = None
+        self._images2 = None
+
+    @property
+    def getID(self):
+        return self._ID
 
     @property
     def getProjMat1(self):

@@ -1,14 +1,15 @@
 import pickle
 import sys
 import os
-from Mocap.Mocap import SingleCameraCalibrate
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QComboBox, QRadioButton, QSlider, QButtonGroup
+from Mocap.Mocap import SingleCameraCalibrate, StereoCalibrate
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QComboBox, QRadioButton, QSlider, QButtonGroup, QToolButton
 from PyQt5.QtWidgets import QCheckBox, QFileDialog, QListWidget, QListWidgetItem, QTabWidget, QLineEdit, QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5 import uic
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 import numpy as np
 import cv2 as cv
+
 
 class MoCapGUI(QMainWindow):
     new_frame_sig = pyqtSignal(tuple)
@@ -77,6 +78,24 @@ class MoCapGUI(QMainWindow):
         self.export_intrinsic_text_pushButton = self.findChild(QPushButton, 'export_intrinsic_text_pushButton')
         self.export_intrinsic_mocap_pushButton = self.findChild(QPushButton, 'export_intrinsic_mocap_pushButton')
         self.disp_time_pushButton = self.findChild(QPushButton, 'disp_time_pushButton')
+        self.browse_intrinsic1_toolButton = self.findChild(QToolButton, 'browse_intrinsic1_toolButton')
+        self.browse_intrinsic2_toolButton = self.findChild(QToolButton, 'browse_intrinsic2_toolButton')
+        self.browse_stereo_img1_toolButton = self.findChild(QToolButton, 'browse_stereo_img1_toolButton')
+        self.browse_stereo_img2_toolButton = self.findChild(QToolButton, 'browse_stereo_img2_toolButton')
+        self.intrinsic1_comboBox = self.findChild(QComboBox, 'intrinsic1_comboBox')
+        self.intrinsic2_comboBox = self.findChild(QComboBox, 'intrinsic2_comboBox')
+        self.stereo_img1_comboBox = self.findChild(QComboBox, 'stereo_img1_comboBox')
+        self.stereo_img2_comboBox = self.findChild(QComboBox, 'stereo_img2_comboBox')
+        self.stereo_img1_list = self.findChild(QListWidget, 'stereo_img1_list')
+        self.stereo_img2_list = self.findChild(QListWidget, 'stereo_img2_list')
+        self.stereo_disp_time_pushButton = self.findChild(QPushButton, 'stereo_disp_time_pushButton')
+        self.stereo_setup_ID_lineEdit = self.findChild(QLineEdit, 'stereo_setup_ID_lineEdit')
+        self.stereo_chess_x_spinBox = self.findChild(QSpinBox, 'stereo_chess_x_spinBox')
+        self.stereo_chess_y_spinBox = self.findChild(QSpinBox, 'stereo_chess_y_spinBox')
+        self.stereo_chess_length_doubleSpinBox = self.findChild(QDoubleSpinBox, 'stereo_chess_length_doubleSpinBox')
+        self.stereo_disp_time_doubleSpinBox = self.findChild(QDoubleSpinBox, 'stereo_disp_time_doubleSpinBox')
+        self.stereo_calibrate_pushButton = self.findChild(QPushButton, 'stereo_calibrate_pushButton')
+        self.stereo_calibrated_setups_list = self.findChild(QListWidget, 'stereo_calibrated_setups_list')
 
 
         # Linking signals to widgets
@@ -99,12 +118,20 @@ class MoCapGUI(QMainWindow):
         assert isinstance(self.main_tabWidget, QTabWidget)
         self.main_tabWidget.currentChanged.connect(self.main_tab_changed)
         assert isinstance(self.loaded_images_list, QListWidget)
-        self.loaded_images_list.itemClicked.connect(self.image_clicked)
+        self.loaded_images_list.itemClicked.connect(self.image_item_clicked)
         self.delete_image_pushButton.clicked.connect(self.remove_image_item)
         self.reload_pushButton.clicked.connect(self.reload_loaded_images_list)
         self.single_calibrate_pushButton.clicked.connect(self.single_calibrate)
-        self.export_intrinsic_text_pushButton.clicked.connect(self.export_intrinsic_txt)
         self.export_intrinsic_mocap_pushButton.clicked.connect(self.export_intrinsic_mocap)
+        self.export_intrinsic_text_pushButton.clicked.connect(self.export_intrinsic_txt)
+        self.browse_intrinsic2_toolButton.clicked.connect(self.load_intrinsic2)
+        self.browse_intrinsic1_toolButton.clicked.connect(self.load_intrinsic1)
+        self.browse_stereo_img1_toolButton.clicked.connect(self.browse_stereo_img1)
+        self.browse_stereo_img2_toolButton.clicked.connect(self.browse_stereo_img2)
+        assert isinstance(self.stereo_img1_comboBox, QComboBox)
+        self.stereo_img1_comboBox.currentTextChanged.connect(self.populate_stereo_img_1_list)
+        self.stereo_img2_comboBox.currentTextChanged.connect(self.populate_stereo_img_2_list)
+        self.stereo_calibrate_pushButton.clicked.connect(self.stereo_calibrate)
 
     def load_video1(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Video load", ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
@@ -194,11 +221,11 @@ class MoCapGUI(QMainWindow):
         """get the same frame the video stream is stopping on and sends a new frame signal"""
         stream = self.video_buttonGroup.checkedId()
 
-        frame_number = self.cap1.get(cv.CAP_PROP_POS_FRAMES)-1
+        frame_number = self.cap1.get(cv.CAP_PROP_POS_FRAMES) - 1
         self.cap1.set(cv.CAP_PROP_POS_FRAMES, frame_number)
         ret1, cv_img1 = self.cap1.read()
 
-        frame_number = self.cap2.get(cv.CAP_PROP_POS_FRAMES)-1
+        frame_number = self.cap2.get(cv.CAP_PROP_POS_FRAMES) - 1
         self.cap2.set(cv.CAP_PROP_POS_FRAMES, frame_number)
         ret2, cv_img2 = self.cap2.read()
 
@@ -240,7 +267,85 @@ class MoCapGUI(QMainWindow):
             item.setData(Qt.UserRole, cv.imread(path))
             self.loaded_images_list.addItem(item)
 
-    def image_clicked(self):
+    def browse_stereo_img1(self):
+        file = QFileDialog.getExistingDirectory(self, "Select Images Directory")
+        if not file:
+            return
+        assert isinstance(self.stereo_img1_comboBox, QComboBox)
+        self.stereo_img1_comboBox.addItem(file)
+        self.populate_stereo_img_1_list(file)
+
+    def populate_stereo_img_1_list(self, folder_path):
+        self.stereo_img1_list.clear()
+        images = os.listdir(folder_path)
+
+        for image in images:
+            path = os.path.join(folder_path, image)
+
+            icon = QIcon()
+            icon.addPixmap(QPixmap(path), QIcon.Normal, QIcon.Off)
+
+            item = QListWidgetItem()
+            item.setIcon(icon)
+            item.setData(Qt.UserRole, cv.imread(path))
+            self.stereo_img1_list.addItem(item)
+
+    def populate_stereo_img_2_list(self, folder_path):
+        self.stereo_img2_list.clear()
+        images = os.listdir(folder_path)
+
+        for image in images:
+            path = os.path.join(folder_path, image)
+
+            icon = QIcon()
+            icon.addPixmap(QPixmap(path), QIcon.Normal, QIcon.Off)
+
+            item = QListWidgetItem()
+            item.setIcon(icon)
+            item.setData(Qt.UserRole, cv.imread(path))
+            self.stereo_img2_list.addItem(item)
+
+    def browse_stereo_img2(self):
+        file = QFileDialog.getExistingDirectory(self, "Select Images Directory")
+        if not file:
+            return
+        assert isinstance(self.stereo_img2_comboBox, QComboBox)
+        self.stereo_img2_comboBox.addItem(file)
+        self.populate_stereo_img_2_list(file)
+
+    def stereo_calibrate(self):
+        images1 = list()
+        items = self.stereo_img1_list.findItems('', Qt.MatchRegExp)
+        for item in items:
+            img = item.data(Qt.UserRole)
+            images1.append(img)
+
+        images2 = list()
+        items = self.stereo_img2_list.findItems('', Qt.MatchRegExp)
+        for item in items:
+            img = item.data(Qt.UserRole)
+            images2.append(img)
+
+        stereo_id = QLineEdit()
+        stereo_id = self.stereo_setup_ID_lineEdit.text()
+        cameraObj1 = self.intrinsic1_comboBox.currentData(Qt.UserRole)
+        cameraObj2 = self.intrinsic2_comboBox.currentData(Qt.UserRole)
+        x = self.stereo_chess_x_spinBox.value()
+        y = self.stereo_chess_y_spinBox.value()
+        chess_length = self.stereo_chess_length_doubleSpinBox.value()
+        time = None
+        if self.stereo_disp_time_pushButton.isChecked():
+            time = int(self.stereo_disp_time_doubleSpinBox.value() * 1000)
+
+        stereo = StereoCalibrate(stereo_id, images1, images2, cameraObj1, cameraObj2, (x, y), chess_length, showPeriod=time)
+        stereo.clear_images()
+
+        item = QListWidgetItem()
+        item.setText(stereo.getID)
+        item.setData(Qt.UserRole, stereo)
+        self.stereo_calibrated_setups_list.addItem(item)
+
+    def image_item_clicked(self):
         item = self.loaded_images_list.currentItem()
         image = item.data(Qt.UserRole)
         q_image = self.convert_cv_qt(image)
@@ -258,6 +363,8 @@ class MoCapGUI(QMainWindow):
 
     def browse_single_images(self):
         file = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if not file:
+            return
         assert isinstance(self.images_path_comboBox, QComboBox)
         self.images_path_comboBox.addItem(file)
         self.populate_single_images_list(file)
@@ -288,38 +395,62 @@ class MoCapGUI(QMainWindow):
             item.setData(Qt.UserRole, img)
             self.loaded_images_list.addItem(item)
 
-        item = QListWidgetItem()
-        item.setText(camera.getName)
-        item.setData(Qt.UserRole, camera)
-
-        assert isinstance(self.camera_intrinsic_list, QListWidget)
-        self.camera_intrinsic_list.addItem(item)
-
         camera.clear_images()
+        item = QListWidgetItem()
+        item.setText(camera.getID)
+        item.setData(Qt.UserRole, camera)
+        self.camera_intrinsic_list.addItem(item)
 
     def export_intrinsic_txt(self):
         item = self.camera_intrinsic_list.currentItem()
         assert isinstance(item, QListWidgetItem)
         cameraObj = item.data(Qt.UserRole)
         assert isinstance(cameraObj, SingleCameraCalibrate)
-        data = "Camera ID = " + cameraObj.getName + "\n\n" \
+        data = "Camera ID = " + cameraObj.getID + "\n\n" \
                + "Images frame size = " + str(cameraObj.getFrameSize) + "\n\n" \
                + "Intrinsic Matrix:\n" + str(cameraObj.getIntMatrix) + "\n\n" \
                + "Distortion Coefficients:\n" + str(cameraObj.getDistortion)
 
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getName, "Text (*.txt)")
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getID, "Text (*.txt)")
+        if not fileName:
+            return
         with open(fileName, 'w') as f:
             f.write(data)
 
     def export_intrinsic_mocap(self):
         item = self.camera_intrinsic_list.currentItem()
-        assert isinstance(item, QListWidgetItem)
         cameraObj = item.data(Qt.UserRole)
-        assert isinstance(cameraObj, SingleCameraCalibrate)
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getName, "Intsc (*.intsc)")
-
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getID, "Intsc (*.intsc)")
+        if not fileName:
+            return
         with open(fileName, 'wb') as f:
             pickle.dump(cameraObj, f)
+
+    def load_intrinsic1(self):
+        fileName, _ = QFileDialog.getOpenFileName(self, "Video Intrinsic Parameters", ".", "Intrinsic (*.intsc)")
+        if not fileName:
+            return
+        with open(fileName, 'rb') as f:
+            cameraObj = pickle.load(f)
+
+        icon = QIcon()
+        item = QListWidgetItem()
+        item.setIcon(icon)
+        item.setData(Qt.UserRole, cameraObj)
+        self.intrinsic1_comboBox.addItem(cameraObj.getID, cameraObj)
+
+    def load_intrinsic2(self):
+        fileName, _ = QFileDialog.getOpenFileName(self, "Video Intrinsic Parameters", ".", "Intrinsic (*.intsc)")
+        if not fileName:
+            return
+        with open(fileName, 'rb') as f:
+            cameraObj = pickle.load(f)
+
+        icon = QIcon()
+        item = QListWidgetItem()
+        item.setIcon(icon)
+        item.setData(Qt.UserRole, cameraObj)
+        self.intrinsic2_comboBox.addItem(cameraObj.getID, cameraObj)
 
     @pyqtSlot(np.ndarray)
     def display_frame(self, images):
@@ -377,11 +508,10 @@ class MoCapGUI(QMainWindow):
         self.saturationMax_Slider.setSliderPosition(HS)
         self.brightnessMax_Slider.setSliderPosition(HI)
 
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     demo = MoCapGUI()
 
     demo.show()
     sys.exit(app.exec_())
-
-#Test
