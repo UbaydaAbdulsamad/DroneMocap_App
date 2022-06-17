@@ -1,102 +1,43 @@
 import pickle
 import sys
+from MocapApp import Ui_MainWindow
 import os
-from Mocap.Mocap import SingleCameraCalibrate, StereoCalibrate
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QPushButton, QComboBox, QRadioButton, QSlider, QButtonGroup, QToolButton
-from PyQt5.QtWidgets import QCheckBox, QFileDialog, QListWidget, QListWidgetItem, QTabWidget, QLineEdit, QSpinBox, QDoubleSpinBox
+from Mocap.Mocap import SingleCameraCalibrate, StereoCalibrate, BackwardProjection
+from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog, QListWidgetItem
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5 import uic
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 import numpy as np
+import socket
+import struct
+from threading import Thread
 import cv2 as cv
 
-
-class MoCapGUI(QMainWindow):
+class MoCapGUI(QMainWindow, Ui_MainWindow):
     new_frame_sig = pyqtSignal(tuple)
     mask_params_changed_sig = pyqtSignal()
     masks_generated_sig = pyqtSignal(tuple)
+    original_display_sig = pyqtSignal(tuple)
 
-    def __init__(self):
-        super().__init__()
-        uic.loadUi('Mocap.ui', self)
+    def __init__(self, parent=None):
+        super(MoCapGUI, self).__init__(parent)
+        self.setupUi(self)
         self.showMaximized()
 
         self.statusBar().showMessage("Frame = 0")
         self.cap1 = cv.VideoCapture()
         self.cap2 = cv.VideoCapture()
+        self.image1 = None
+        self.image2 = None
         self.masks_parameters = np.zeros((2, 3, 2, 3), dtype=int)
+        self.backProj = BackwardProjection()
 
-        # defining widgets
-        self.stream1_label = self.findChild(QLabel, 'stream1_label')
-        self.stream2_label = self.findChild(QLabel, 'stream2_label')
-        self.stream3_label = self.findChild(QLabel, 'stream3_label')
-        self.stream4_label = self.findChild(QLabel, 'stream4_label')
-        self.streamResolution_label = self.findChild(QLabel, 'StreamFrameRate_Label')
-        self.streamFrameRate_Label = self.findChild(QLabel, 'streamFrameRate_Label')
-        self.camera1_CheckBox = self.findChild(QCheckBox, 'camera1_CheckBox')
-        self.camera2_CheckBox = self.findChild(QCheckBox, 'camera2_CheckBox')
-        self.camera3_CheckBox = self.findChild(QCheckBox, 'camera3_CheckBox')
-        self.camera4_CheckBox = self.findChild(QCheckBox, 'camera4_CheckBox')
-        self.loadVideo1_Button = self.findChild(QPushButton, 'loadVideo1_Button')
-        self.loadVideo2_Button = self.findChild(QPushButton, 'loadVideo2_Button')
-        self.offlineStereo_ComboBox = self.findChild(QComboBox, 'offlineStereo_ComboBox')
-        self.activeMaskVideo1_Radio = self.findChild(QRadioButton, 'activeMaskVideo1_Radio')
-        assert isinstance(self.activeMaskVideo1_Radio, QRadioButton)
-        self.activeMaskVideo2_Radio = self.findChild(QRadioButton, 'activeMaskVideo2_Radio')
-        self.channelRed_Radio = self.findChild(QRadioButton, 'channelRed_Radio')
-        self.channelGreen_Radio = self.findChild(QRadioButton, 'channelGreen_Radio')
-        self.channelBlue_Radio = self.findChild(QRadioButton, 'channelBlue_Radio')
-        self.hueMin_Slider = self.findChild(QSlider, 'hueMin_Slider')
-        self.hueMax_Slider = self.findChild(QSlider, 'hueMax_Slider')
-        self.saturationMin_Slider = self.findChild(QSlider, 'saturationMin_Slider')
-        self.saturationMax_Slider = self.findChild(QSlider, 'saturationMax_Slider')
-        self.brightnessMin_Slider = self.findChild(QSlider, 'brightnessMin_Slider')
-        self.brightnessMax_Slider = self.findChild(QSlider, 'brightnessMax_Slider')
-        self.video_buttonGroup = self.findChild(QButtonGroup, 'video_buttonGroup')
-        assert isinstance(self.video_buttonGroup, QButtonGroup)
+        self.socket = socket.socket()
+
         self.video_buttonGroup.setId(self.activeMaskVideo1_Radio, 0)
         self.video_buttonGroup.setId(self.activeMaskVideo2_Radio, 1)
-        self.rgb_buttonGroup = self.findChild(QButtonGroup, 'rgb_buttonGroup')
-        assert isinstance(self.rgb_buttonGroup, QButtonGroup)
         self.rgb_buttonGroup.setId(self.channelRed_Radio, 0)
         self.rgb_buttonGroup.setId(self.channelBlue_Radio, 1)
         self.rgb_buttonGroup.setId(self.channelGreen_Radio, 2)
-        self.video_horizontal_slider = self.findChild(QSlider, 'video_horizontalSlider')
-        self.browse_images_pushButton = self.findChild(QPushButton, 'browse_images_pushButton')
-        self.images_path_comboBox = self.findChild(QComboBox, 'images_path_comboBox')
-        self.loaded_images_list = self.findChild(QListWidget, 'loaded_images_list')
-        self.main_tabWidget = self.findChild(QTabWidget, 'main_tabWidget')
-        self.delete_image_pushButton = self.findChild(QPushButton, 'delete_image_pushButton')
-        self.reload_pushButton = self.findChild(QPushButton, 'reload_pushButton')
-        self.delete_all_images_pushButton = self.findChild(QPushButton, 'delete_all_images_pushButton')
-        self.single_calibrate_pushButton = self.findChild(QPushButton, 'single_calibrate_pushButton')
-        self.camera_id_lineEdit = self.findChild(QLineEdit, 'camera_id_lineEdit')
-        self.chess_size_x_spinBox = self.findChild(QSpinBox, 'chess_size_x_spinBox')
-        self.chess_size_y_spinBox = self.findChild(QSpinBox, 'chess_size_y_spinBox')
-        self.img_disp_time_doubleSpinBox = self.findChild(QDoubleSpinBox, 'img_disp_time_doubleSpinBox')
-        self.camera_intrinsic_list = self.findChild(QListWidget, 'camera_intrinsic_list')
-        self.export_intrinsic_text_pushButton = self.findChild(QPushButton, 'export_intrinsic_text_pushButton')
-        self.export_intrinsic_mocap_pushButton = self.findChild(QPushButton, 'export_intrinsic_mocap_pushButton')
-        self.disp_time_pushButton = self.findChild(QPushButton, 'disp_time_pushButton')
-        self.browse_intrinsic1_toolButton = self.findChild(QToolButton, 'browse_intrinsic1_toolButton')
-        self.browse_intrinsic2_toolButton = self.findChild(QToolButton, 'browse_intrinsic2_toolButton')
-        self.browse_stereo_img1_toolButton = self.findChild(QToolButton, 'browse_stereo_img1_toolButton')
-        self.browse_stereo_img2_toolButton = self.findChild(QToolButton, 'browse_stereo_img2_toolButton')
-        self.intrinsic1_comboBox = self.findChild(QComboBox, 'intrinsic1_comboBox')
-        self.intrinsic2_comboBox = self.findChild(QComboBox, 'intrinsic2_comboBox')
-        self.stereo_img1_comboBox = self.findChild(QComboBox, 'stereo_img1_comboBox')
-        self.stereo_img2_comboBox = self.findChild(QComboBox, 'stereo_img2_comboBox')
-        self.stereo_img1_list = self.findChild(QListWidget, 'stereo_img1_list')
-        self.stereo_img2_list = self.findChild(QListWidget, 'stereo_img2_list')
-        self.stereo_disp_time_pushButton = self.findChild(QPushButton, 'stereo_disp_time_pushButton')
-        self.stereo_setup_ID_lineEdit = self.findChild(QLineEdit, 'stereo_setup_ID_lineEdit')
-        self.stereo_chess_x_spinBox = self.findChild(QSpinBox, 'stereo_chess_x_spinBox')
-        self.stereo_chess_y_spinBox = self.findChild(QSpinBox, 'stereo_chess_y_spinBox')
-        self.stereo_chess_length_doubleSpinBox = self.findChild(QDoubleSpinBox, 'stereo_chess_length_doubleSpinBox')
-        self.stereo_disp_time_doubleSpinBox = self.findChild(QDoubleSpinBox, 'stereo_disp_time_doubleSpinBox')
-        self.stereo_calibrate_pushButton = self.findChild(QPushButton, 'stereo_calibrate_pushButton')
-        self.stereo_calibrated_setups_list = self.findChild(QListWidget, 'stereo_calibrated_setups_list')
-
 
         # Linking signals to widgets
         self.loadVideo1_Button.clicked.connect(self.load_video1)
@@ -115,23 +56,29 @@ class MoCapGUI(QMainWindow):
         self.rgb_buttonGroup.buttonClicked.connect(self.update_mask_sliders)
         self.video_buttonGroup.buttonClicked.connect(self.update_mask_sliders)
         self.browse_images_pushButton.clicked.connect(self.browse_single_images)
-        assert isinstance(self.main_tabWidget, QTabWidget)
         self.main_tabWidget.currentChanged.connect(self.main_tab_changed)
-        assert isinstance(self.loaded_images_list, QListWidget)
         self.loaded_images_list.itemClicked.connect(self.image_item_clicked)
         self.delete_image_pushButton.clicked.connect(self.remove_image_item)
         self.reload_pushButton.clicked.connect(self.reload_loaded_images_list)
         self.single_calibrate_pushButton.clicked.connect(self.single_calibrate)
-        self.export_intrinsic_mocap_pushButton.clicked.connect(self.export_intrinsic_mocap)
+        self.export_intrinsic_mocap_pushButton.clicked.connect(self.export_single_intrinsic)
         self.export_intrinsic_text_pushButton.clicked.connect(self.export_intrinsic_txt)
         self.browse_intrinsic2_toolButton.clicked.connect(self.load_intrinsic2)
         self.browse_intrinsic1_toolButton.clicked.connect(self.load_intrinsic1)
         self.browse_stereo_img1_toolButton.clicked.connect(self.browse_stereo_img1)
         self.browse_stereo_img2_toolButton.clicked.connect(self.browse_stereo_img2)
-        assert isinstance(self.stereo_img1_comboBox, QComboBox)
         self.stereo_img1_comboBox.currentTextChanged.connect(self.populate_stereo_img_1_list)
         self.stereo_img2_comboBox.currentTextChanged.connect(self.populate_stereo_img_2_list)
         self.stereo_calibrate_pushButton.clicked.connect(self.stereo_calibrate)
+        self.stereo_export_txt_pushButton.clicked.connect(self.export_stereo_txt)
+        self.stereo_export_projmat_pushButton.clicked.connect(self.export_stereo_projMat)
+        self.publish_locations_pushButton.clicked.connect(self.publish_locations)
+        self.actionExit.triggered.connect(self.save_masks_parameters)
+        self.show_enclosing_circle_pushButton.clicked.connect(self.show_circles)
+        self.offlineStereo_ComboBox.highlighted.connect(self.select_stereo_object)
+        self.load_stereo_toolButton.clicked.connect(self.load_stereo)
+
+        self.load_masks_params()
 
     def load_video1(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Video load", ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
@@ -142,9 +89,9 @@ class MoCapGUI(QMainWindow):
         self.video_horizontal_slider.setRange(1, int(frame_count))
 
         ret, cv_img = self.cap1.read()
+        self.image1 = cv_img
         if ret:
             self.new_frame_sig.emit((cv_img, 0))
-            print("img1 emitted")
 
     def load_video2(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Video load", ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
@@ -155,23 +102,38 @@ class MoCapGUI(QMainWindow):
         self.video_horizontal_slider.setRange(1, int(frame_count))
 
         ret, cv_img = self.cap2.read()
+        self.image2 = cv_img
         if ret:
             self.new_frame_sig.emit((0, cv_img))
 
     def video_seeker_slider_changed(self, frame_index):
         self.statusBar().showMessage("Frame " + str(frame_index))
 
-        if self.cap1:
+        if self.cap1.isOpened() and self.cap2.isOpened():
+            self.cap1.set(cv.CAP_PROP_POS_FRAMES, frame_index)
+            self.cap2.set(cv.CAP_PROP_POS_FRAMES, frame_index)
+            ret1, cv_img1 = self.cap1.read()
+            ret2, cv_img2 = self.cap2.read()
+            self.image1 = cv_img1
+            self.image2 = cv_img2
+            if ret1 and ret2:
+                self.new_frame_sig.emit((cv_img1, cv_img2))
+
+        elif self.cap1.isOpened() and not self.cap2.isOpened():
             self.cap1.set(cv.CAP_PROP_POS_FRAMES, frame_index)
             ret, cv_img = self.cap1.read()
+            self.image1 = cv_img
             if ret:
                 self.new_frame_sig.emit((cv_img, 0))
 
-        if self.cap2:
+        elif self.cap2.isOpened() and not self.cap1.isOpened():
             self.cap2.set(cv.CAP_PROP_POS_FRAMES, frame_index)
             ret, cv_img = self.cap2.read()
+            self.image2 = cv_img
             if ret:
                 self.new_frame_sig.emit((0, cv_img))
+        else:
+            return
 
     def update_mask_parameters(self):
         stream = self.video_buttonGroup.checkedId()
@@ -191,7 +153,25 @@ class MoCapGUI(QMainWindow):
     def apply_mask(self, cv_images):
         cv_img1, cv_img2 = cv_images
 
-        if type(cv_img1) is not int:
+        if type(cv_img1) is not int and type(cv_img2) is not int:
+            hsv1 = cv.cvtColor(cv_img1, cv.COLOR_BGR2HLS)
+            low_r, high_r = self.masks_parameters[0, 0]
+            low_g, high_g = self.masks_parameters[0, 1]
+            low_b, high_b = self.masks_parameters[0, 2]
+            mask1_r = cv.inRange(hsv1, low_r, high_r)
+            mask1_g = cv.inRange(hsv1, low_g, high_g)
+            mask1_b = cv.inRange(hsv1, low_b, high_b)
+
+            hsv2 = cv.cvtColor(cv_img2, cv.COLOR_BGR2HLS)
+            low_r, high_r = self.masks_parameters[1, 0]
+            low_g, high_g = self.masks_parameters[1, 1]
+            low_b, high_b = self.masks_parameters[1, 2]
+            mask2_r = cv.inRange(hsv2, low_r, high_r)
+            mask2_g = cv.inRange(hsv2, low_g, high_g)
+            mask2_b = cv.inRange(hsv2, low_b, high_b)
+            self.masks_generated_sig.emit(((mask1_r, mask1_g, mask1_b), (mask2_r, mask2_g, mask2_b)))
+
+        elif type(cv_img1) is not int and type(cv_img2) is int:
             hsv = cv.cvtColor(cv_img1, cv.COLOR_BGR2HLS)
 
             low_r, high_r = self.masks_parameters[0, 0]
@@ -204,7 +184,7 @@ class MoCapGUI(QMainWindow):
 
             self.masks_generated_sig.emit(((mask_r, mask_g, mask_b), 0))
 
-        if type(cv_img2) is not int:
+        elif type(cv_img1) is int and type(cv_img2) is not int:
             hsv = cv.cvtColor(cv_img2, cv.COLOR_BGR2HLS)
 
             low_r, high_r = self.masks_parameters[1, 0]
@@ -216,6 +196,9 @@ class MoCapGUI(QMainWindow):
             mask_b = cv.inRange(hsv, low_b, high_b)
 
             self.masks_generated_sig.emit((0, (mask_r, mask_g, mask_b)))
+
+        else:
+            print("problem with receiving images to be masked")
 
     def get_current_frame(self):
         """get the same frame the video stream is stopping on and sends a new frame signal"""
@@ -271,7 +254,6 @@ class MoCapGUI(QMainWindow):
         file = QFileDialog.getExistingDirectory(self, "Select Images Directory")
         if not file:
             return
-        assert isinstance(self.stereo_img1_comboBox, QComboBox)
         self.stereo_img1_comboBox.addItem(file)
         self.populate_stereo_img_1_list(file)
 
@@ -309,7 +291,6 @@ class MoCapGUI(QMainWindow):
         file = QFileDialog.getExistingDirectory(self, "Select Images Directory")
         if not file:
             return
-        assert isinstance(self.stereo_img2_comboBox, QComboBox)
         self.stereo_img2_comboBox.addItem(file)
         self.populate_stereo_img_2_list(file)
 
@@ -326,7 +307,6 @@ class MoCapGUI(QMainWindow):
             img = item.data(Qt.UserRole)
             images2.append(img)
 
-        stereo_id = QLineEdit()
         stereo_id = self.stereo_setup_ID_lineEdit.text()
         cameraObj1 = self.intrinsic1_comboBox.currentData(Qt.UserRole)
         cameraObj2 = self.intrinsic2_comboBox.currentData(Qt.UserRole)
@@ -345,6 +325,8 @@ class MoCapGUI(QMainWindow):
         item.setData(Qt.UserRole, stereo)
         self.stereo_calibrated_setups_list.addItem(item)
 
+        self.offlineStereo_ComboBox.addItem(stereo.getID, stereo)
+
     def image_item_clicked(self):
         item = self.loaded_images_list.currentItem()
         image = item.data(Qt.UserRole)
@@ -357,7 +339,6 @@ class MoCapGUI(QMainWindow):
         self.loaded_images_list.takeItem(row)
 
     def reload_loaded_images_list(self):
-        assert isinstance(self.images_path_comboBox, QComboBox)
         path = self.images_path_comboBox.currentText()
         self.populate_single_images_list(path)
 
@@ -365,7 +346,6 @@ class MoCapGUI(QMainWindow):
         file = QFileDialog.getExistingDirectory(self, "Select Directory")
         if not file:
             return
-        assert isinstance(self.images_path_comboBox, QComboBox)
         self.images_path_comboBox.addItem(file)
         self.populate_single_images_list(file)
 
@@ -399,13 +379,14 @@ class MoCapGUI(QMainWindow):
         item = QListWidgetItem()
         item.setText(camera.getID)
         item.setData(Qt.UserRole, camera)
+
         self.camera_intrinsic_list.addItem(item)
+        self.intrinsic1_comboBox.addItem(camera.getID, camera)
+        self.intrinsic2_comboBox.addItem(camera.getID, camera)
 
     def export_intrinsic_txt(self):
         item = self.camera_intrinsic_list.currentItem()
-        assert isinstance(item, QListWidgetItem)
         cameraObj = item.data(Qt.UserRole)
-        assert isinstance(cameraObj, SingleCameraCalibrate)
         data = "Camera ID = " + cameraObj.getID + "\n\n" \
                + "Images frame size = " + str(cameraObj.getFrameSize) + "\n\n" \
                + "Intrinsic Matrix:\n" + str(cameraObj.getIntMatrix) + "\n\n" \
@@ -417,7 +398,7 @@ class MoCapGUI(QMainWindow):
         with open(fileName, 'w') as f:
             f.write(data)
 
-    def export_intrinsic_mocap(self):
+    def export_single_intrinsic(self):
         item = self.camera_intrinsic_list.currentItem()
         cameraObj = item.data(Qt.UserRole)
         fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", cameraObj.getID, "Intsc (*.intsc)")
@@ -425,6 +406,54 @@ class MoCapGUI(QMainWindow):
             return
         with open(fileName, 'wb') as f:
             pickle.dump(cameraObj, f)
+
+    def export_stereo_txt(self):
+        item = self.stereo_calibrated_setups_list.currentItem()
+        stereo = item.data(Qt.UserRole)
+        data = "Parameters of ({}) stereo setup:\n\n".format(stereo.getID) \
+               + "Fundamental Matrix: \n" + str(stereo.getFundamentalMat) + "\n\n" \
+               + "Essential Matrix:\n" + str(stereo.getEssentialMat) + "\n\n" \
+               + "Projection matrix of main camera ({}):\n".format(stereo.getCameraObj1.getID) + str(stereo.getProjMat1) + "\n\n" \
+               + "Projection matrix of second camera ({}):\n".format(stereo.getCameraObj2.getID) + str(stereo.getProjMat2) + "\n\n" \
+               + "Rotation matrix:\n" + str(stereo.getRotMat) \
+               + "Translation vector:\n" + str(stereo.getTransVec) + "\n\n\n" \
+               + "Parameters of the main camera ({}):\n\n".format(stereo.getCameraObj1.getID) \
+               + "intrinsic matrix:\n" + str(stereo.getCameraObj1.getIntMatrix) + "\n\n" \
+               + "Frame size: " + str(stereo.getCameraObj1.getFrameSize) + "\n\n" \
+               + "Distortion coefficients:\n" + str(stereo.getCameraObj1.getDistortion) \
+               + "Parameters of the second camera({}):\n\n".format(stereo.getCameraObj1.getID) \
+               + "intrinsic matrix:\n" + str(stereo.getCameraObj2.getIntMatrix) + "\n\n" \
+               + "Frame size: " + str(stereo.getCameraObj2.getFrameSize) \
+               + "Distortion coefficients:\n" + str(stereo.getCameraObj2.getDistortion)
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Stereo Parameters", stereo.getID, "Text (*.txt)")
+        if not fileName:
+            return
+        with open(fileName, 'w') as f:
+            f.write(data)
+
+    def export_stereo_projMat(self):
+        item = self.stereo_calibrated_setups_list.currentItem()
+        stereo = item.data(Qt.UserRole)
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Intrinsic Parameters", stereo.getID, "ProjMat (*.projmat)")
+        if not fileName:
+            return
+        with open(fileName, 'wb') as f:
+            pickle.dump(stereo, f)
+
+    def load_stereo(self):
+        fileName, _ = QFileDialog.getOpenFileName(self, "Load stereo setup", ".", "ProjMat (*.projmat)")
+        if not fileName:
+            return
+        with open(fileName, 'rb') as f:
+            stereoObj = pickle.load(f)
+
+        icon = QIcon()
+        item = QListWidgetItem()
+        item.setIcon(icon)
+        item.setData(Qt.UserRole, stereoObj)
+        self.offlineStereo_ComboBox.addItem(stereoObj.getID, stereoObj)
+
+        self.backProj.update_stereo(stereoObj)
 
     def load_intrinsic1(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Video Intrinsic Parameters", ".", "Intrinsic (*.intsc)")
@@ -452,6 +481,43 @@ class MoCapGUI(QMainWindow):
         item.setData(Qt.UserRole, cameraObj)
         self.intrinsic2_comboBox.addItem(cameraObj.getID, cameraObj)
 
+    def show_circles(self):
+        if self.show_enclosing_circle_pushButton.isChecked():
+            self.masks_generated_sig.connect(self.detect_blobs)
+            self.original_display_sig.connect(self.display_frame)
+
+        else:
+            self.masks_generated_sig.disconnect(self.detect_blobs)
+            self.original_display_sig.disconnect(self.display_frame)
+
+    def detect_blobs(self, images):
+        self.backProj.detect_blobs(images)
+        images = self.backProj.draw_circles((self.image1, self.image2))
+        self.original_display_sig.emit(images)
+
+    def select_stereo_object(self, item):
+        stereoObj = item.data(Qt.UserRole)
+        self.backProj.update_stereo(stereoObj)
+
+    def triangulate(self):
+        p1x, p1y, p1z, p2x, p2y, p2z = self.backProj.triangulate()
+
+        data_protocol = '6f'
+        packed_data = struct.pack(data_protocol, p1x, p1y, p1z, p2x, p2y, p2z)
+        self.socket.send(packed_data)
+
+    def publish_locations(self):
+
+        if self.publish_locations_pushButton.isChecked():
+            print("about to publish")
+            self.masks_generated_sig.connect(self.triangulate)
+            self.socket.connect((socket.gethostname(), 1234))
+            print("connected!")
+
+        else:
+            self.masks_generated_sig.disconnect(self.triangulate)
+            self.socket.close()
+
     @pyqtSlot(np.ndarray)
     def display_frame(self, images):
         """Updates the image_label with a new opencv image"""
@@ -471,20 +537,34 @@ class MoCapGUI(QMainWindow):
     def display_mask(self, masks):
         """Updates the image_label with a new opencv image"""
         mask1, mask2 = masks
-
         current_id = self.rgb_buttonGroup.checkedId()
 
-        if type(mask1) is not int:
+        if type(mask1) is not int and type(mask2) is not int:
             cv_img = mask1[current_id]
             qt_img = self.convert_cv_qt(cv_img)
             p = qt_img.scaledToHeight(480, Qt.FastTransformation)
             self.stream3_label.setPixmap(p)
 
-        if type(mask2) is not int:
             cv_img = mask2[current_id]
             qt_img = self.convert_cv_qt(cv_img)
             p = qt_img.scaledToHeight(480, Qt.FastTransformation)
             self.stream4_label.setPixmap(p)
+
+        elif type(mask1) is not int:
+            cv_img = mask1[current_id]
+            qt_img = self.convert_cv_qt(cv_img)
+            p = qt_img.scaledToHeight(480, Qt.FastTransformation)
+            self.stream3_label.setPixmap(p)
+
+        elif type(mask2) is not int:
+            cv_img = mask2[current_id]
+            qt_img = self.convert_cv_qt(cv_img)
+            p = qt_img.scaledToHeight(480, Qt.FastTransformation)
+            self.stream4_label.setPixmap(p)
+
+        else:
+            print("types of masks are different")
+            return
 
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
@@ -508,6 +588,16 @@ class MoCapGUI(QMainWindow):
         self.saturationMax_Slider.setSliderPosition(HS)
         self.brightnessMax_Slider.setSliderPosition(HI)
 
+    def save_masks_parameters(self):
+        print("should be saved")
+        with open('maskParams.params', 'wb') as f:
+            pickle.dump(self.masks_parameters, f)
+
+    def load_masks_params(self):
+        with open('maskParams.params', 'rb') as f:
+            print("should be read")
+            self.masks_parameters = pickle.load(f)
+        self.update_mask_sliders()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

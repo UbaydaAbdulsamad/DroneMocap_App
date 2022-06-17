@@ -1,5 +1,6 @@
 import datetime
 from threading import Thread
+import multiprocessing as mp
 from numpy import linalg
 import cv2
 import glob
@@ -344,6 +345,8 @@ class StereoCalibrate:
         self._images2 = images2
         self._camera1 = camera1
         self._camera2 = camera2
+        self._essentialMatrix = None
+        self._fundamentalMatrix = None
         self._chessboardSize = chessboard_size
         self._chessboardDistance = chessboard_distance
         self._pairImagesNumber = 0
@@ -423,10 +426,11 @@ class StereoCalibrate:
         flags |= cv2.CALIB_FIX_INTRINSIC
         criteria_stereo = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-        retStereo, newCameraMatrixWebcam, distFirst, newCameraMatrixJ6, distSecond, self._rotationMat, self._transVector, essentialMatrix, fundamentalMatrix = \
+        retStereo, newCameraMatrixWebcam, distFirst, newCameraMatrixJ6, distSecond, \
+        self._rotationMat, self._transVector, self._essentialMatrix, self._fundamentalMatrix = \
             cv2.stereoCalibrate(objpoints, imgpointsL, imgpointsR, self._camera1.getIntMatrix,
-                                self._camera1.getDistortion, self._camera2.getIntMatrix, self._camera2.getDistortion,
-                                grayL.shape[::-1], criteria_stereo, flags)
+                                self._camera1.getDistortion, self._camera2.getIntMatrix,
+                                self._camera2.getDistortion,grayL.shape[::-1], criteria_stereo, flags)
 
         # Calculating Projection Matrices
         self._projMatC1 = np.concatenate((self._camera1.getIntMatrix, np.zeros((3, 1))), axis=1)
@@ -444,6 +448,14 @@ class StereoCalibrate:
     @property
     def getID(self):
         return self._ID
+
+    @property
+    def getEssentialMat(self):
+        return self._essentialMatrix
+
+    @property
+    def getFundamentalMat(self):
+        return self._fundamentalMatrix
 
     @property
     def getProjMat1(self):
@@ -488,6 +500,146 @@ class StereoCalibrate:
         return self._transVector
 
 
+class BackwardProjection:
+
+    def __init__(self):
+        self.stereo = None
+        isinstance(self.stereo, StereoCalibrate)
+
+        # mask parameters are (stream, channel, (low, high), (hue, saturation, brightness))
+        self.mask_parameters = np.zeros((2, 3, 2, 3), dtype=int)
+        self.img1_r = np.zeros((1280, 720), dtype=bool)
+        self.img1_g = np.zeros((1280, 720), dtype=bool)
+        self.img1_b = np.zeros((1280, 720), dtype=bool)
+        self.img2_r = np.zeros((1280, 720), dtype=bool)
+        self.img2_g = np.zeros((1280, 720), dtype=bool)
+        self.img2_b = np.zeros((1280, 720), dtype=bool)
+
+        # blobs contains (stream, channel, (x, y, r))
+        self.blobs = np.zeros((2, 3, 3), dtype=int)
+        self.points = np.zeros((3, 3), dtype=float)
+
+        self.process1 = mp.Process(target=self.blob_detection_process1)
+        self.process2 = mp.Process(target=self.blob_detection_process2)
+        self.process3 = mp.Process(target=self.blob_detection_process3)
+        self.process4 = mp.Process(target=self.blob_detection_process4)
+        self.process5 = mp.Process(target=self.blob_detection_process5)
+        self.process6 = mp.Process(target=self.blob_detection_process6)
+
+    def detect_blobs(self, images):
+
+        self.img1_r = images[0][0]
+        self.img1_g = images[0][1]
+        self.img1_b = images[0][2]
+        self.img2_r = images[1][0]
+        self.img2_g = images[1][1]
+        self.img2_b = images[1][2]
+
+        contours, _ = cv2.findContours(self.img1_r, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 0, 0], self.blobs[0, 0, 1]), self.blobs[0, 0, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        contours, _ = cv2.findContours(self.img1_g, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 1, 0], self.blobs[0, 1, 1]), self.blobs[0, 1, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        contours, _ = cv2.findContours(self.img1_b, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 2, 0], self.blobs[0, 2, 1]), self.blobs[0, 2, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        contours, _ = cv2.findContours(self.img2_r, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 0, 0], self.blobs[1, 0, 1]), self.blobs[1, 0, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        contours, _ = cv2.findContours(self.img2_g, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 1, 0], self.blobs[1, 1, 1]), self.blobs[1, 1, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        contours, _ = cv2.findContours(self.img2_b, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 2, 0], self.blobs[1, 2, 1]), self.blobs[1, 2, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+        # self.process1.start()
+        # self.process2.start()
+        # self.process3.start()
+        # self.process4.start()
+        # self.process5.start()
+        # self.process6.start()
+        #
+        # self.process1.join()
+        # self.process2.join()
+        # self.process3.join()
+        # self.process4.join()
+        # self.process5.join()
+        # self.process6.join()
+
+    def blob_detection_process1(self):
+        contours, _ = cv2.findContours(self.img1_r, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 0, 0], self.blobs[0, 0, 1]), self.blobs[0, 0, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def blob_detection_process2(self):
+        contours, _ = cv2.findContours(self.img1_g, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 1, 0], self.blobs[0, 1, 1]), self.blobs[0, 1, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def blob_detection_process3(self):
+        contours, _ = cv2.findContours(self.img1_b, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[0, 2, 0], self.blobs[0, 2, 1]), self.blobs[0, 2, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def blob_detection_process4(self):
+        contours, _ = cv2.findContours(self.img2_r, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 0, 0], self.blobs[1, 0, 1]), self.blobs[1, 0, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def blob_detection_process5(self):
+        contours, _ = cv2.findContours(self.img2_g, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 1, 0], self.blobs[1, 1, 1]), self.blobs[1, 1, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def blob_detection_process6(self):
+        contours, _ = cv2.findContours(self.img2_b, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > 0:
+            (self.blobs[1, 2, 0], self.blobs[1, 2, 1]), self.blobs[1, 2, 2] = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+    def triangulate_point(self, x1, x2, p1, p2):
+        M = np.zeros((6, 6))
+        M[:3, :4] = p1
+        M[3:, :4] = p2
+        M[:3, 4] = [-x1[0], -x1[1], -1]
+        M[3:, 5] = [-x2[0], -x2[1], -1]
+        U, S, V = linalg.svd(M)
+        X = V[-1, :4]
+        return X[:3] / X[3]
+
+    def draw_circles(self, images, **kwargs):
+        thickness = kwargs.get('thickness', 3)
+        cv2.circle(images[0], (int(self.blobs[0, 0, 0]), int(self.blobs[0, 0, 1])), int(self.blobs[0, 0, 2]), (0, 255, 0), thickness)
+        cv2.circle(images[0], (int(self.blobs[0, 1, 0]), int(self.blobs[0, 1, 1])), int(self.blobs[0, 1, 2]), (0, 255, 0), thickness)
+        cv2.circle(images[0], (int(self.blobs[0, 2, 0]), int(self.blobs[0, 2, 1])), int(self.blobs[0, 2, 2]), (0, 255, 0), thickness)
+        cv2.circle(images[1], (int(self.blobs[1, 0, 0]), int(self.blobs[1, 0, 1])), int(self.blobs[1, 0, 2]), (0, 255, 0), thickness)
+        cv2.circle(images[1], (int(self.blobs[1, 1, 0]), int(self.blobs[1, 1, 1])), int(self.blobs[1, 1, 2]), (0, 255, 0), thickness)
+        cv2.circle(images[1], (int(self.blobs[1, 2, 0]), int(self.blobs[1, 2, 1])), int(self.blobs[1, 2, 2]), (0, 255, 0), thickness)
+
+        return images
+
+    def triangulate(self):
+        # blobs contains (stream, channel, (x, y, r))
+        self.points[0] = self.triangulate_point(self.blobs[0, 0][:2], self.blobs[1, 0][:2], self.stereo.getProjMat1, self.stereo.getProjMat2)
+        self.points[1] = self.triangulate_point(self.blobs[0, 1][:2], self.blobs[1, 1][:2], self.stereo.getProjMat1, self.stereo.getProjMat2)
+        self.points[2] = self.triangulate_point(self.blobs[0, 2][:2], self.blobs[1, 2][:2], self.stereo.getProjMat1, self.stereo.getProjMat2)
+        P = (self.points[0, 0], self.points[0, 1], self.points[0, 2],
+             self.points[1, 0], self.points[1, 1], self.points[1, 2])
+        return P
+
+    def update_mask_parameters(self, mask):
+        self.mask_parameters = mask
+
+    def update_stereo(self, stereo_obj):
+        self.stereo = stereo_obj
+
+
 class Triangulate:
     def __init__(self, stereo, **kwargs):
         self._stereo = stereo
@@ -513,8 +665,7 @@ class Triangulate:
 
     def triangulate_points(self, points):
         for index, marker in enumerate(points):
-            self._points3d[index] = self.triangulate_point(
-                marker[0], marker[1], self._stereo.getProjMat1, self._stereo.getProjMat2)
+            self._points3d[index] = self.triangulate_point(marker[0], marker[1], self._stereo.getProjMat1, self._stereo.getProjMat2)
 
     @property
     def points3d(self):
@@ -673,8 +824,7 @@ class LocateObjects:
         self._frames_num = streams_num
         self._markers_num = markers_num
         self._frames = np.empty([streams_num], np.ndarray)
-        self._boundary_arrays = np.empty(
-            [streams_num, markers_num], np.ndarray)
+        self._boundary_arrays = np.empty([streams_num, markers_num], np.ndarray)
         self._pause = pause_contour_calculations
 
         # private data
@@ -682,15 +832,13 @@ class LocateObjects:
 
         # outputs
         self._radius = np.zeros([self._frames_num, self._markers_num], float)
-        self._points = np.zeros(
-            [self._markers_num, self._frames_num, 2], float)
+        self._points = np.zeros([self._markers_num, self._frames_num, 2], float)
         self._masks = np.empty([self._frames_num, self._markers_num], object)
 
     def update_masks(self):
         for frame_index in range(self._frames_num):
             for marker_index in range(self._markers_num):
-                hsv = cv2.cvtColor(
-                    self._frames[frame_index], cv2.COLOR_BGR2HLS)
+                hsv = cv2.cvtColor(self._frames[frame_index], cv2.COLOR_BGR2HLS)
                 self._masks[frame_index, marker_index] = \
                     cv2.inRange(hsv, self._boundary_arrays[frame_index, marker_index]
                                 [:3], self._boundary_arrays[frame_index, marker_index][3:6])
@@ -698,13 +846,11 @@ class LocateObjects:
     def locate(self):
         for mask_index in range(self._frames_num):
             for marker_index in range(self._markers_num):
-                contours, _ = cv2.findContours(
-                    self._masks[mask_index, marker_index], cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+                contours, _ = cv2.findContours(self._masks[mask_index, marker_index], cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
                 if len(contours) > 0:
                     (self._points[marker_index, mask_index, 0], self._points[marker_index, mask_index, 1]), self._radius[mask_index, marker_index] = \
-                        cv2.minEnclosingCircle(
-                            max(contours, key=cv2.contourArea))
+                        cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
 
     def update(self, frames, boundaries):
         self._frames = frames
