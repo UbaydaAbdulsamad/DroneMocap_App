@@ -31,7 +31,7 @@ class MoCapGUI(QMainWindow, Ui_MainWindow):
         self.masks_parameters = np.zeros((2, 3, 2, 3), dtype=int)
         self.backProj = BackwardProjection()
 
-        self.socket = socket.socket()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.video_buttonGroup.setId(self.activeMaskVideo1_Radio, 0)
         self.video_buttonGroup.setId(self.activeMaskVideo2_Radio, 1)
@@ -501,6 +501,7 @@ class MoCapGUI(QMainWindow, Ui_MainWindow):
 
     def triangulate(self):
         p1x, p1y, p1z, p2x, p2y, p2z = self.backProj.triangulate()
+        print(p1x, ' .. ', p1y, '..', p1z, ' .. ')
 
         data_protocol = '6f'
         packed_data = struct.pack(data_protocol, p1x, p1y, p1z, p2x, p2y, p2z)
