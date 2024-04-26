@@ -1,4 +1,4 @@
-# Introduction:
+# Project Overview:
 Indoor localization systems are quite expensive. The project is trying to address this problem by provide an affordable solution for local educational institutions. It project allows researchers to conduct various control experiments that heavily depends on localization, one of which is controlling a swarm of drones.
 
 <p align="center">
